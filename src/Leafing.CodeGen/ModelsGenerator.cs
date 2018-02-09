@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using Leafing.Data;
 using Leafing.Data.SqlEntry;
+using System.IO;
 
 namespace Leafing.CodeGen
 {
@@ -22,19 +23,19 @@ namespace Leafing.CodeGen
 
                 Result = new StringBuilder();
 
-                _types = new Dictionary<Type, string>
-                             {
-                                 {typeof (string), "string"},
-                                 {typeof (int), "int"},
-                                 {typeof (short), "short"},
-                                 {typeof (long), "long"},
-                                 {typeof (float), "float"},
-                                 {typeof (double), "double"},
-                                 {typeof (DateTime), "DateTime"},
-                                 {typeof (bool), "bool"},
-                                 {typeof (TimeSpan), "Time"},
-                                 {typeof (byte[]), "byte[]"},
-                             };
+                _types = new Dictionary<Type, string> {
+                    { typeof (bool), "bool" },
+                    { typeof (byte), "byte" },
+                    { typeof (short), "short" },
+                    { typeof (int), "int" },
+                    { typeof (long), "long" },
+                    { typeof (float), "float" },
+                    { typeof (double), "double" },
+                    { typeof (DateTime), "DateTime" },
+                    { typeof (TimeSpan), "Time" },
+                    { typeof (byte[]), "byte[]" },
+                    { typeof (string), "string" },
+                };
             }
 
             protected string GetTypeName(Type t)
@@ -49,7 +50,7 @@ namespace Leafing.CodeGen
             protected string GetNullableTypeName(DbColumnInfo info)
             {
                 string s = GetTypeName(info.DataType);
-                if(info.AllowDBNull && info.DataType.IsValueType)
+                if (info.AllowDBNull && info.DataType.IsValueType)
                 {
                     s += "?";
                 }
@@ -58,11 +59,20 @@ namespace Leafing.CodeGen
 
             public virtual string Build()
             {
-                Result.Append("public class ").Append(TableName);
+                Result.Append(
+@"using Leafing.Data.Definition;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Web;
+
+namespace GuLinOA.Models
+{
+    public partial class ").Append(TableName);
                 AppendBaseType(TableName);
                 foreach (var info in InfoList)
                 {
-                    if(info.IsKey)
+                    if (info.IsKey)
                     {
                         BuildKeyColomn(info);
                         ProcessKeyColumn(info);
@@ -73,7 +83,44 @@ namespace Leafing.CodeGen
                         ProcessColumn(info);
                     }
                 }
-                Result.Append("}\r\n");
+
+                Result.Append(
+@"        public ").Append(TableName).Append(@"()
+        {
+");
+                foreach (var info in InfoList)
+                {
+                    if (info.ColumnName.ToLower() == "id")
+                    {
+                    }
+                    else
+                    {
+                        var defaultValue = "";
+                        if (info.DataType == typeof(string))
+                        {
+                            defaultValue = "\"\"";
+                        }
+                        else if (info.DataType == typeof(long) || info.DataType == typeof(int) || info.DataType == typeof(byte))
+                        {
+                            defaultValue = "0";
+                        }
+                        else if (info.DataType == typeof(bool))
+                        {
+                            defaultValue = "true";
+                        }
+                        else if (info.DataType == typeof(DateTime))
+                        {
+                            defaultValue = "DateTime.Now";
+                        }
+                        Result.AppendLine($"            this.{info.ColumnName} = {defaultValue};");
+                    }
+                }
+
+                Result.Append(
+@"        }
+    }
+}
+");
                 return Result.ToString();
             }
 
@@ -84,37 +131,47 @@ namespace Leafing.CodeGen
 
             protected virtual void AppendBaseType(string tableName)
             {
-                Result.Append(" : DbObjectModel<").Append(tableName).Append(">\r\n{\r\n");
+                Result.Append(
+$@" : DbObjectModel<{tableName}>
+    {{
+");
             }
 
             protected virtual void BuildKeyColomn(DbColumnInfo info)
             {
             }
 
+            protected StringBuilder AppendLine(string prefix, string content)
+            {
+                Result.Append(prefix);
+                Result.AppendLine(content);
+
+                return Result;
+            }
+
             protected virtual void BuildColumn(DbColumnInfo info)
             {
-                Result.Append("\t");
-                if(info.AllowDBNull && !info.DataType.IsValueType)
+                var prefix = "        ";
+                if (info.AllowDBNull && !info.DataType.IsValueType)
                 {
-                    Result.Append("[AllowNull] ");
+                    AppendLine(prefix, "[AllowNull]");
                 }
-                if(info.DataType == typeof(string) || info.DataType == typeof(byte[]))
+                if (info.DataType == typeof(string) || info.DataType == typeof(byte[]))
                 {
                     if (info.ColumnSize < 32768)
                     {
-                        Result.Append("[Length(").Append(info.ColumnSize).Append(")] ");
+                        AppendLine(prefix, $"[Length({info.ColumnSize})]");
                     }
                 }
-                if(info.IsUnique)
+                if (info.IsUnique)
                 {
-                    Result.Append("[Index(UNIQUE = true)] ");
+                    AppendLine(prefix, "[Index(UNIQUE = true)]");
                 }
-                Result.Append("public ");
-                Result.Append(GetNullableTypeName(info));
-                Result.Append(" ");
-                Result.Append(info.ColumnName);
-                Result.Append(GetColumnBody());
-                Result.Append("\r\n");
+
+                var nullableTypeName = GetNullableTypeName(info);
+                var columnBody = GetColumnBody();
+
+                AppendLine(prefix, $"public {nullableTypeName} {info.ColumnName} {columnBody}");
             }
 
             protected virtual void ProcessKeyColumn(DbColumnInfo info)
@@ -127,7 +184,7 @@ namespace Leafing.CodeGen
 
             protected virtual string GetColumnBody()
             {
-                return " { get; set; }";
+                return "{ get; set; }";
             }
         }
 
@@ -141,29 +198,34 @@ namespace Leafing.CodeGen
 
             protected override void AppendInitMethodBody()
             {
-                Result.Append("{\r\n");
-                if(InitMethodBody.Length > 3)
+                Result.AppendLine("    {");
+                if (InitMethodBody.Length > 3)
                 {
                     Result.Append(InitMethodBody);
-                    Result.Append("\t\treturn this;\r\n");
+                    Result.Append(
+@"        return this;
+");
                 }
-                Result.Append("\t}\r\n");
+                Result.AppendLine("    }");
             }
 
             protected override void AppendBaseType(string tableName)
             {
-                Result.Append(" : IDbObject\r\n{\r\n");
+                Result.Append(
+@" : IDbObject
+    {
+");
             }
 
             protected override void BuildKeyColomn(DbColumnInfo info)
             {
-                Result.Append(info.IsAutoIncrement ? "\t[DbKey]\r\n" : "\t[DbKey(IsDbGenerate = false)]\r\n");
+                Result.AppendLine(info.IsAutoIncrement ? "    [DbKey]" : "    [DbKey(IsDbGenerate = false)]");
                 BuildColumn(info);
             }
 
             protected override void ProcessKeyColumn(DbColumnInfo info)
             {
-                if(!info.IsAutoIncrement)
+                if (!info.IsAutoIncrement)
                 {
                     ProcessColumn(info);
                 }
@@ -173,11 +235,7 @@ namespace Leafing.CodeGen
             {
                 base.ProcessColumn(info);
 
-                InitMethodBody.Append("\t\tthis.");
-                InitMethodBody.Append(info.ColumnName);
-                InitMethodBody.Append(" = ");
-                InitMethodBody.Append(info.ColumnName);
-                InitMethodBody.Append(";\r\n");
+                InitMethodBody.AppendLine($@"        this.{info.ColumnName} = {info.ColumnName};");
             }
 
             protected override string GetColumnBody()
@@ -191,33 +249,82 @@ namespace Leafing.CodeGen
             return DbEntry.Provider.GetTableNames();
         }
 
-        public string GenerateModelFromDatabase(string tableName)
+        public string GenerateModelFromDatabase(string tableName, string outputPath = null)
         {
-            if(tableName.ToLower() == "*")
-            {
-                var sb = new StringBuilder();
+            var sb = new StringBuilder();
+            if(string.IsNullOrEmpty(tableName) || tableName == "*")
+            {//生成所有表
                 foreach (var table in GetTableList())
                 {
-                    string s = GetModel(table);
-                    sb.Append(s);
-                    sb.Append("\r\n");
+                    string contents = GetModel(table);
+                    sb.AppendLine(contents);
                 }
-                return sb.ToString();
             }
-            return GetModel(tableName);
+            else
+            {//仅生成指定表
+                string contents = GetModel(tableName, outputPath);
+                sb.AppendLine(contents);
+            }
+
+            return sb.ToString();
         }
 
-        private static string GetModel(string tableName)
+        static string GetModel(string tableName, string outputPath = null)
         {
             var list = DbEntry.Provider.GetDbColumnInfoList(tableName);
+            //如果包含Id列，则生成 ModelBuilder；否则生成 ObjectModelBuilder。
+            var hasIdColumn = false;
             foreach (var info in list)
             {
                 if (info.IsKey && info.IsAutoIncrement && info.ColumnName.ToLower() == "id")
                 {
-                    return new ModelBuilder(tableName, list).Build();
+                    hasIdColumn = true;
+                    break;
                 }
             }
-            return new ObjectModelBuilder(tableName, list).Build();
+
+            string contents = "";
+            if (hasIdColumn)
+                contents = new ModelBuilder(tableName, list).Build();
+            else
+                contents = new ObjectModelBuilder(tableName, list).Build();
+
+            if(!string.IsNullOrEmpty(outputPath))
+            {//存储到文件
+                if (!Directory.Exists(outputPath))
+                    Directory.CreateDirectory(outputPath);
+
+                File.WriteAllText(Path.Combine(outputPath, $"{tableName}.cs"), contents, Encoding.UTF8);
+                CreatePartialFile(Path.Combine(outputPath, $"{tableName}_Ex.cs"), tableName);
+            }
+
+            return contents;
+        }
+
+        /// <summary>
+        /// 如果文件不存在，则创建Partial类。
+        /// </summary>
+        /// <param name="fileName"></param>
+        /// <param name="tableName"></param>
+        static void CreatePartialFile(string fileName, string tableName)
+        {
+            if (File.Exists(fileName))
+                return;
+
+            var sb = new StringBuilder();
+            sb.Append(@"using Leafing.Data.Definition;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Web;
+
+namespace GuLinOA.Models
+{
+    public partial class " + tableName + @"
+    {
+    }
+}");
+            File.WriteAllText(fileName, sb.ToString(), Encoding.UTF8);
         }
     }
 }

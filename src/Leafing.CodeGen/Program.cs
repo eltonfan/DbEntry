@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using Leafing.Core;
 using System.Reflection;
@@ -12,6 +12,9 @@ using Leafing.Data.Model.Handler.Generator;
 
 namespace Leafing.CodeGen
 {
+    /// <summary>
+    /// 用法：exe m TableName1,TableName2,TableName3 "C:\OutputPath\"
+    /// </summary>
     internal class Program
     {
         private static int Main(string[] args)
@@ -39,15 +42,25 @@ namespace Leafing.CodeGen
 
         private static void Process(string[] args)
         {
-            if(args.Length > 0 && args[0].ToLower() == "m")
+            if(args.Length < 1)
             {
-                if(args.Length == 1)
+                Console.WriteLine("Code Generator For DbEntry.Net http://dbentry.codeplex.com.");
+                Console.WriteLine("Modified by Elton FAN, http://elton.io/");
+                return;
+            }
+
+            if(args[0].ToLower() == "m")
+            {
+                if(args.Length < 3)
                 {
                     ShowTableList();
                 }
                 else
                 {
-                    GenerateModelFromDatabase(args[1]);
+                    var basePath = args[1];
+                    var parts = args[2].Split(new string[] { ",", ";", "|" }, StringSplitOptions.RemoveEmptyEntries);
+
+                    GenerateModelFromDatabase(basePath, parts);
                 }
                 return;
             }
@@ -163,10 +176,14 @@ namespace Leafing.CodeGen
             }
         }
 
-        private static void GenerateModelFromDatabase(string tableName)
+        static void GenerateModelFromDatabase(string outputPath, params string[] tableNames)
         {
             var g = new ModelsGenerator();
-            Console.WriteLine(g.GenerateModelFromDatabase(tableName));
+            foreach (var tableName in tableNames)
+            {
+                var result = g.GenerateModelFromDatabase(tableName, outputPath);
+                Console.WriteLine(result);
+            }
         }
 
 		private static void GenerateAssembly(string fileName)

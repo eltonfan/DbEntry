@@ -31,5 +31,7 @@
 /src/*.userprefs
 /src/*.user
 
+.vs
 *.suo
+*.user
 /bin/*.nupkg
