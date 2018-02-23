@@ -100,13 +100,17 @@ namespace GuLinOA.Models
                         {
                             defaultValue = "\"\"";
                         }
+                        else if (info.DataType == typeof(decimal))
+                        {
+                            defaultValue = "(decimal)0.0";
+                        }
                         else if (info.DataType == typeof(long) || info.DataType == typeof(int) || info.DataType == typeof(byte))
                         {
                             defaultValue = "0";
                         }
                         else if (info.DataType == typeof(bool))
                         {
-                            defaultValue = "true";
+                            defaultValue = "false";
                         }
                         else if (info.DataType == typeof(DateTime))
                         {
